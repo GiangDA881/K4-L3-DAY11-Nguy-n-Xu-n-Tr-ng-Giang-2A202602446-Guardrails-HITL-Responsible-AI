@@ -131,6 +131,7 @@ def detect_injection(user_input: str) -> InputStatus:
 _EXTRA_ALLOWED_TOPICS = [
     "bank", "card", "mortgage", "exchange rate", "overdraft", "statement",
     "the ghi no", "the atm", "the visa",
+    "hello", "hi", "xin chao", "chao", "help", "tro giup", "tu van", "support",
 ]
 
 
