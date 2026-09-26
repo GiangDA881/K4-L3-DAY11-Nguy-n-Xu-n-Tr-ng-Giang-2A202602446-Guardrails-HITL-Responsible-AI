@@ -100,6 +100,10 @@ def detect_injection(user_input: str) -> InputStatus:
         r"\b(tiet lo|cho (toi|tui|minh) biet|in ra)\b.{0,30}?\b(mat khau|api|noi bo|he thong|cau hinh|prompt)\b",
         r"\bmat khau\s+(admin|quan tri|he thong|noi bo)\b",
         r"\bban (bay gio )?la\b.{0,20}?\b(khong gioi han|khong kiem duyet|dan)\b",
+        # Simulation / Debug mode / Token tracer
+        r"\b(simulate|simulation|mo phong|mô phỏng)\b.{0,40}?\b(mode|che do|tracer|debug|diagnostic|internal|noi bo)\b",
+        r"\b(token tracer|debug mode|diagnostic mode)\b",
+        r"\b(cong cu|công cụ|tool)\s+(debug|noi bo|nội bộ|internal)\b",
         # SQL / command injection smuggled through the chat box
         r"\b(drop|truncate|delete\s+from|alter)\s+table\b|\bunion\s+(all\s+)?select\b|;\s*--|\bor\s+1\s*=\s*1\b",
     ]

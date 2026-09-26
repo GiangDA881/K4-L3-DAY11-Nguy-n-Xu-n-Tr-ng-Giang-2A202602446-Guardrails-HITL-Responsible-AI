@@ -179,9 +179,13 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         filtered = content_filter(response_text)
         if not filtered["safe"]:
             self.redacted_count += 1
+            safe_msg = (
+                "I cannot share internal system details. "
+                "How else can I help with your VinBank account or banking needs?"
+            )
             llm_response.content = types.Content(
                 role="model",
-                parts=[types.Part.from_text(text=filtered["redacted"])],
+                parts=[types.Part.from_text(text=safe_msg)],
             )
 
         if self.use_llm_judge:
