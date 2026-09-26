@@ -48,6 +48,9 @@ def content_filter(response: str) -> dict:
         "password": r"(?:password|passwd|pwd|mật\s*khẩu|mat\s*khau)\s*(?:is|là|:|=)\s*[\"'`]?[^\s\"'`,;]+",
         "known_secret": r"\badmin123\b",
         "internal_host": r"\b[\w-]+(?:\.[\w-]+)*\.(?:internal|local|corp)(?::\d{2,5})?\b",
+        "spaced_admin": r"a[\s_.-]*d[\s_.-]*m[\s_.-]*i[\s_.-]*n[\s_.-]*1[\s_.-]*2[\s_.-]*3",
+        "spaced_sk": r"s[\s_.-]*k[\s_.-]*[-_]?[\s_.-]*v[\s_.-]*i[\s_.-]*n[\s_.-]*b[\s_.-]*a[\s_.-]*n[\s_.-]*k",
+        "spaced_db": r"d[\s_.-]*b[\s_.-]*\.[\s_.-]*v[\s_.-]*i[\s_.-]*n[\s_.-]*b[\s_.-]*a[\s_.-]*n[\s_.-]*k",
     }
 
     for name, pattern in PII_PATTERNS.items():
