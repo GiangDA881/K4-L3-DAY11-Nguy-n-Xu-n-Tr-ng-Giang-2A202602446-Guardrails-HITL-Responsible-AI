@@ -402,7 +402,7 @@ async def handle_query(req: QueryRequest):
     result = await pipeline.process(query, user_id=f"arena_slot_{slot}", call_llm=True)
     blocked = result["blocked"]
     layer = result["layer"]
-    reply = result["response_preview"]
+    reply = result.get("response") or result.get("response_preview") or ""
     leaked = response_leaked_secrets(reply)
 
     if blocked:

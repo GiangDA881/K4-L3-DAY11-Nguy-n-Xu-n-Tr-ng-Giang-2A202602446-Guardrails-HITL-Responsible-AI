@@ -169,6 +169,7 @@ class DefensePipeline:
             "blocked": blocked,
             "layer": layer,
             "redacted": redacted,
+            "response": response,
             "response_preview": (response or "")[:200],
         }
 

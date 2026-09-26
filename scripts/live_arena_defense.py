@@ -62,7 +62,7 @@ async def main():
         
         blocked = result["blocked"]
         layer = result["layer"]
-        reply = result["response_preview"]
+        reply = result.get("response") or result.get("response_preview") or ""
         leaked = response_leaked_secrets(reply)
 
         print("\n" + "=" * 30 + " KẾT QUẢ " + "=" * 30)
