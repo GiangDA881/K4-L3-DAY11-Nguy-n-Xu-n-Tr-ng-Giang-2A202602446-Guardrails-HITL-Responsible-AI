@@ -11,6 +11,7 @@ Status convention (không dùng True/False mơ hồ):
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Literal
 
 from google.genai import types
@@ -21,6 +22,29 @@ from core.config import ALLOWED_TOPICS, BLOCKED_TOPICS
 
 # Quyết định rõ ràng — tránh đảo nghĩa True/False
 InputStatus = Literal["ALLOW", "BLOCK"]
+
+MAX_INPUT_CHARS = 2000
+
+_INVISIBLE_CHARS = dict.fromkeys(
+    map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad"),
+    None,
+)
+
+# Common leetspeak substitutions used to dodge keyword regexes (1gn0re -> ignore).
+_LEET_MAP = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"})
+
+
+def normalize_text(text: str) -> str:
+    """NFKC-normalize, drop invisible characters, collapse whitespace."""
+    normalized = unicodedata.normalize("NFKC", text or "")
+    normalized = normalized.translate(_INVISIBLE_CHARS)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def strip_accents(text: str) -> str:
+    """Remove Vietnamese diacritics so ``tài khoản`` matches ``tai khoan``."""
+    decomposed = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
 # ============================================================
@@ -52,14 +76,44 @@ def detect_injection(user_input: str) -> InputStatus:
         ``"BLOCK"`` if injection detected (chặn), ``"ALLOW"`` otherwise (cho qua).
     """
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        # Instruction override (EN)
+        r"\b(ignore|disregard|forget|override|bypass|skip)\b.{0,40}?\b(instructions?|rules|guidelines|prompts?|directives|polic(y|ies)|guardrails|restrictions)\b",
+        # Role hijack
+        r"\byou are now\b",
+        r"\bfrom now on,? you (are|will|must)\b",
+        r"\bpretend (you are|you're|to be)\b",
+        r"\bact as (a |an )?(unrestricted|unfiltered|uncensored|jailbroken|evil|different)\b",
+        r"\b(dan|jailbreak(ed)?|do anything now|developer mode|god mode)\b",
+        # System prompt probing
+        r"\bsystem\s*(prompt|message|override|instructions?)\b",
+        r"\b(reveal|show|print|display|repeat|output|dump|leak|disclose|share|tell me)\b.{0,40}?\b(your|the|my)\s+(instructions|prompt|system|config(uration)?|internal notes?|rules)\b",
+        r"<\s*/?\s*(system|instructions?|admin)\s*>|\[\s*(system|inst|admin)\s*\]",
+        # Credential / internal data exfiltration
+        r"\b(admin|root|internal|system|staff|database|db)\s+(password|credentials?|secrets?|notes?|host(name)?|connection string)\b",
+        r"\bapi[\s_-]*keys?\b",
+        r"\bdb\.\w+\.internal\b|\bconnection string\b",
+        r"\b(password|api key|db host|database host|secret)\s*(is|=|:)\s*(_{2,}|\.{3,}|\?|\[blank\])",
+        r"\b(base64|rot13|hex|morse|reverse(d)?|spell (it )?out|letter by letter)\b.{0,50}?\b(password|secret|key|prompt|instructions|credentials?)\b",
+        r"\b(password|secret|key|prompt|instructions|credentials?)\b.{0,50}?\b(base64|rot13|hex|morse|letter by letter)\b",
+        # Vietnamese (accent-stripped)
+        r"\bbo qua\b.{0,20}?\b(huong dan|chi dan|quy tac|lenh)\b",
+        r"\b(tiet lo|cho (toi|tui|minh) biet|in ra)\b.{0,30}?\b(mat khau|api|noi bo|he thong|cau hinh|prompt)\b",
+        r"\bmat khau\s+(admin|quan tri|he thong|noi bo)\b",
+        r"\bban (bay gio )?la\b.{0,20}?\b(khong gioi han|khong kiem duyet|dan)\b",
+        # SQL / command injection smuggled through the chat box
+        r"\b(drop|truncate|delete\s+from|alter)\s+table\b|\bunion\s+(all\s+)?select\b|;\s*--|\bor\s+1\s*=\s*1\b",
     ]
 
-    for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, user_input, re.IGNORECASE):
-            return "BLOCK"
+    normalized = normalize_text(user_input)
+    variants = {
+        normalized,
+        strip_accents(normalized),
+        strip_accents(normalized).lower().translate(_LEET_MAP),
+    }
+    for variant in variants:
+        for pattern in INJECTION_PATTERNS:
+            if re.search(pattern, variant, re.IGNORECASE):
+                return "BLOCK"
     return "ALLOW"
 
 
@@ -74,6 +128,12 @@ def detect_injection(user_input: str) -> InputStatus:
 # Return ``"ALLOW"`` if banking-related and OK.
 # ============================================================
 
+_EXTRA_ALLOWED_TOPICS = [
+    "bank", "card", "mortgage", "exchange rate", "overdraft", "statement",
+    "the ghi no", "the atm", "the visa",
+]
+
+
 def topic_filter(user_input: str) -> InputStatus:
     """Decide whether the input is on-topic for VinBank.
 
@@ -84,14 +144,18 @@ def topic_filter(user_input: str) -> InputStatus:
         ``"BLOCK"`` = chặn (off-topic hoặc topic cấm).
         ``"ALLOW"`` = cho qua (câu banking hợp lệ).
     """
-    input_lower = user_input.lower()
+    input_lower = strip_accents(normalize_text(user_input)).lower()
+    if not input_lower:
+        return "BLOCK"
 
-    # TODO: Implement logic:
-    # 1. If input contains any blocked topic -> return "BLOCK"
-    # 2. If input doesn't contain any allowed topic -> return "BLOCK"
-    # 3. Otherwise -> return "ALLOW"
+    for topic in BLOCKED_TOPICS:
+        if re.search(rf"\b{re.escape(topic)}", input_lower):
+            return "BLOCK"
 
-    pass  # Replace with your implementation
+    allowed = list(ALLOWED_TOPICS) + _EXTRA_ALLOWED_TOPICS
+    if any(topic in input_lower for topic in allowed):
+        return "ALLOW"
+    return "BLOCK"
 
 
 # ============================================================
@@ -144,14 +208,28 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         self.total_count += 1
         text = self._extract_text(user_message)
 
-        # TODO: Implement logic:
-        # 1. Call detect_injection(text)
-        #    - If "BLOCK": increment blocked_count, return self._block_response("...")
-        # 2. Call topic_filter(text)
-        #    - If "BLOCK": increment blocked_count, return self._block_response("...")
-        # 3. If both return "ALLOW": return None (let message through)
+        if len(text) > MAX_INPUT_CHARS:
+            self.blocked_count += 1
+            return self._block_response(
+                f"Request blocked: message is too long (limit {MAX_INPUT_CHARS} characters)."
+            )
 
-        pass  # Replace with your implementation
+        if detect_injection(text) == "BLOCK":
+            self.blocked_count += 1
+            return self._block_response(
+                "Request blocked: I can't follow instructions that try to change my "
+                "rules or reveal internal information. I can help with VinBank "
+                "banking questions such as accounts, transfers, savings or loans."
+            )
+
+        if topic_filter(text) == "BLOCK":
+            self.blocked_count += 1
+            return self._block_response(
+                "Sorry, I can only help with VinBank banking topics: accounts, "
+                "transactions, transfers, savings, interest rates, loans and credit cards."
+            )
+
+        return None
 
 
 # ============================================================
